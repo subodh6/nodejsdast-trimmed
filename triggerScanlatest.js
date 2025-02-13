@@ -4,7 +4,6 @@ const API_KEY = process.env.RAPID7_API_KEY;
 const API_URL_SCAN_CONFIGS = 'https://us3.api.insight.rapid7.com/ias/v1/scan-configs';
 const API_URL_SCANS = 'https://us3.api.insight.rapid7.com/ias/v1/scans';
 
-const APP_NAME = process.env.APP_NAME || 'devopssphere.site';
 const SCAN_CONFIG_NAME = process.env.SCAN_CONFIG_NAME || 'nodejsscan';
 
 const POLLING_INTERVAL = 30 * 1000; // 30 seconds
@@ -26,31 +25,39 @@ const triggerScan = async () => {
         const scanConfig = scanConfigs.find(config => config.name === SCAN_CONFIG_NAME);
 
         if (!scanConfig) {
-            console.error(`Scan Configuration "${SCAN_CONFIG_NAME}" not found.`);
+            console.error(`❌ Scan Configuration "${SCAN_CONFIG_NAME}" not found.`);
             process.exit(1);
         }
 
-        console.log(`Found Scan Configuration: ${scanConfig.name}, ID: ${scanConfig.id}`);
+        console.log(`✅ Found Scan Configuration: ${scanConfig.name}, ID: ${scanConfig.id}`);
 
         // Step 3: Trigger Scan
         const scanRequestBody = {
             scan_config: { id: scanConfig.id }
         };
 
-        const scanResponse = await axios.post(API_URL_SCANS, scanRequestBody, {
-            headers: {
-                'x-api-key': API_KEY,
-                'Content-Type': 'application/json'
-            }
-        });
+        let scanResponse;
+        try {
+            scanResponse = await axios.post(API_URL_SCANS, scanRequestBody, {
+                headers: {
+                    'x-api-key': API_KEY,
+                    'Content-Type': 'application/json'
+                }
+            });
+        } catch (error) {
+            console.error('❌ Error triggering scan:', error.response ? error.response.data : error.message);
+            process.exit(1);
+        }
 
-        if (!scanResponse.data.id) {
-            console.error('Scan did not return a valid Scan ID. Possible API issue.');
+        console.log('📌 Scan API Response:', scanResponse.data);
+
+        if (!scanResponse.data || !scanResponse.data.id) {
+            console.error('❌ Scan did not return a valid Scan ID. Possible API issue.');
             process.exit(1);
         }
 
         const scanId = scanResponse.data.id;
-        console.log(`Scan Triggered Successfully! Scan ID: ${scanId}`);
+        console.log(`🚀 Scan Triggered Successfully! Scan ID: ${scanId}`);
 
         // Step 4: Wait for Scan Completion
         let retryCount = 0;
@@ -65,23 +72,23 @@ const triggerScan = async () => {
             });
 
             const scanStatus = statusResponse.data.status;
-            console.log(`Current Scan Status: ${scanStatus}`);
+            console.log(`🔄 Current Scan Status: ${scanStatus}`);
 
             if (scanStatus === 'SUCCESS') {
-                console.log('Scan completed successfully!');
+                console.log('✅ Scan completed successfully!');
                 process.exit(0);
             } else if (scanStatus === 'FAILED' || scanStatus === 'CANCELED') {
-                console.error(`Scan failed with status: ${scanStatus}`);
+                console.error(`❌ Scan failed with status: ${scanStatus}`);
                 process.exit(1);
             }
 
             retryCount++;
         }
 
-        console.error('Scan timed out without completion.');
+        console.error('⏳ Scan timed out without completion.');
         process.exit(1);
     } catch (error) {
-        console.error('Error triggering scan:', error.response ? error.response.data : error.message);
+        console.error('❌ Unexpected Error:', error.response ? error.response.data : error.message);
         process.exit(1);
     }
 };
