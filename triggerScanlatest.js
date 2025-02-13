@@ -1,15 +1,14 @@
 const axios = require('axios');
 
-const API_KEY = process.env.RAPID7_API_KEY; // API Key from environment variable
+const API_KEY = process.env.RAPID7_API_KEY;
 const API_URL_SCAN_CONFIGS = 'https://us3.api.insight.rapid7.com/ias/v1/scan-configs';
 const API_URL_SCANS = 'https://us3.api.insight.rapid7.com/ias/v1/scans';
-const API_URL_SCAN_STATUS = 'https://us3.api.insight.rapid7.com/ias/v1/scans/'; // Append Scan ID
 
-const APP_NAME = process.env.APP_NAME || 'devopssphere.site'; // Set app name
-const SCAN_CONFIG_NAME = process.env.SCAN_CONFIG_NAME || 'nodejsscan'; // Set scan config name
+const APP_NAME = process.env.APP_NAME || 'devopssphere.site';
+const SCAN_CONFIG_NAME = process.env.SCAN_CONFIG_NAME || 'nodejsscan';
 
 const POLLING_INTERVAL = 30 * 1000; // 30 seconds
-const MAX_RETRIES = 40; // Wait for 40*30 = 1200 seconds (20 mins)
+const MAX_RETRIES = 40; // Wait for 40*30 = 20 mins
 
 const triggerScan = async () => {
     try {
@@ -23,7 +22,7 @@ const triggerScan = async () => {
 
         const scanConfigs = scanConfigsResponse.data.data;
 
-        // Step 2: Find the Scan Config ID for the given SCAN_CONFIG_NAME
+        // Step 2: Find the Scan Config ID
         const scanConfig = scanConfigs.find(config => config.name === SCAN_CONFIG_NAME);
 
         if (!scanConfig) {
@@ -35,9 +34,7 @@ const triggerScan = async () => {
 
         // Step 3: Trigger Scan
         const scanRequestBody = {
-            scan_config: {
-                id: scanConfig.id
-            }
+            scan_config: { id: scanConfig.id }
         };
 
         const scanResponse = await axios.post(API_URL_SCANS, scanRequestBody, {
@@ -47,15 +44,20 @@ const triggerScan = async () => {
             }
         });
 
+        if (!scanResponse.data.id) {
+            console.error('Scan did not return a valid Scan ID. Possible API issue.');
+            process.exit(1);
+        }
+
         const scanId = scanResponse.data.id;
         console.log(`Scan Triggered Successfully! Scan ID: ${scanId}`);
 
         // Step 4: Wait for Scan Completion
         let retryCount = 0;
         while (retryCount < MAX_RETRIES) {
-            await new Promise(resolve => setTimeout(resolve, POLLING_INTERVAL)); // Wait before polling
+            await new Promise(resolve => setTimeout(resolve, POLLING_INTERVAL));
 
-            const statusResponse = await axios.get(`${API_URL_SCAN_STATUS}${scanId}`, {
+            const statusResponse = await axios.get(`${API_URL_SCANS}/${scanId}`, {
                 headers: {
                     'x-api-key': API_KEY,
                     'Content-Type': 'application/json'
@@ -65,21 +67,19 @@ const triggerScan = async () => {
             const scanStatus = statusResponse.data.status;
             console.log(`Current Scan Status: ${scanStatus}`);
 
-            // Check if scan is completed
             if (scanStatus === 'SUCCESS') {
                 console.log('Scan completed successfully!');
-                process.exit(0); // Exit with success
+                process.exit(0);
             } else if (scanStatus === 'FAILED' || scanStatus === 'CANCELED') {
                 console.error(`Scan failed with status: ${scanStatus}`);
-                process.exit(1); // Exit with failure
+                process.exit(1);
             }
 
             retryCount++;
         }
 
         console.error('Scan timed out without completion.');
-        process.exit(1); // Fail if timeout reached
-
+        process.exit(1);
     } catch (error) {
         console.error('Error triggering scan:', error.response ? error.response.data : error.message);
         process.exit(1);
