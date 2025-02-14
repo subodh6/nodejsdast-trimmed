@@ -1,16 +1,21 @@
 const axios = require('axios');
 
+// Fetch API Key and Scan Config Name from Environment Variables (set in buildspec.yml)
 const API_KEY = process.env.RAPID7_API_KEY;
+const SCAN_CONFIG_NAME = process.env.SCAN_CONFIG_NAME || 'nodejsscan';
+
+// Rapid7 API Endpoints
 const API_URL_SCAN_CONFIGS = 'https://us3.api.insight.rapid7.com/ias/v1/scan-configs';
 const API_URL_SCANS = 'https://us3.api.insight.rapid7.com/ias/v1/scans';
 
-const SCAN_CONFIG_NAME = process.env.SCAN_CONFIG_NAME || 'nodejsscan';
-
+// Polling Configuration
 const POLLING_INTERVAL = 30 * 1000; // 30 seconds
 const MAX_RETRIES = 40; // Wait for 40*30 = 20 mins
 
 const triggerScan = async () => {
     try {
+        console.log('🔍 Fetching Scan Configurations...');
+
         // Step 1: Fetch Scan Configs
         const scanConfigsResponse = await axios.get(API_URL_SCAN_CONFIGS, {
             headers: {
