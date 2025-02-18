@@ -1,6 +1,6 @@
 const axios = require('axios');
 
-// Fetch API Key and Scan Config Name from Environment Variables (set in buildspec.yml)
+// Fetch API Key and Scan Config Name from Environment Variables  (set in buildspec.yml)
 const API_KEY = process.env.RAPID7_API_KEY;
 const SCAN_CONFIG_NAME = process.env.SCAN_CONFIG_NAME || 'nodejsscan';
 
