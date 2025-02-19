@@ -1,21 +1,16 @@
 const axios = require('axios');
 
-// Environment Variables
-const API_KEY = process.env.RAPID7_API_KEY; // API Key from buildspec.yml
-const APP_NAME = process.env.APP_NAME || 'devopssphere.site'; // Application name
-const SCAN_CONFIG_NAME = process.env.SCAN_CONFIG_NAME || 'nodejsscan'; // Scan config name
-
-// API Endpoints
+const API_KEY = process.env.RAPID7_API_KEY; // API Key from environment variable
 const API_URL_SCAN_CONFIGS = 'https://us3.api.insight.rapid7.com/ias/v1/scan-configs';
 const API_URL_SCANS = 'https://us3.api.insight.rapid7.com/ias/v1/scans';
 
-// Polling Parameters
-const MAX_WAIT_TIME = 60 * 60 * 1000; // 1 Hour Timeout
-const POLL_INTERVAL = 60000; // 60 Seconds Polling
+const APP_NAME = process.env.APP_NAME || 'devopssphere.site'; // Set app name
+const SCAN_CONFIG_NAME = process.env.SCAN_CONFIG_NAME || 'nodejsscan'; // Set scan config name
 
-async function triggerScan() {
+const triggerScan = async () => {
     try {
-        // Fetch Scan Configs
+        // Step 1: Fetch Scan Configs
+        console.log("Fetching scan configurations...");
         const scanConfigsResponse = await axios.get(API_URL_SCAN_CONFIGS, {
             headers: {
                 'x-api-key': API_KEY,
@@ -24,6 +19,8 @@ async function triggerScan() {
         });
 
         const scanConfigs = scanConfigsResponse.data.data;
+
+        // Step 2: Find the Scan Config ID for the given SCAN_CONFIG_NAME
         const scanConfig = scanConfigs.find(config => config.name === SCAN_CONFIG_NAME);
 
         if (!scanConfig) {
@@ -33,67 +30,70 @@ async function triggerScan() {
 
         console.log(`Found Scan Configuration: ${scanConfig.name}, ID: ${scanConfig.id}`);
 
-        // Trigger Scan
-        const scanResponse = await axios.post(API_URL_SCANS, {
-            scan_config: { id: scanConfig.id }
-        }, {
+        // Step 3: Trigger Scan
+        const scanRequestBody = {
+            scan_config: {
+                id: scanConfig.id
+            }
+        };
+
+        console.log("Triggering scan...");
+        const scanResponse = await axios.post(API_URL_SCANS, scanRequestBody, {
             headers: {
                 'x-api-key': API_KEY,
                 'Content-Type': 'application/json'
             }
         });
 
+        if (!scanResponse.data || !scanResponse.data.id) {
+            console.error("Scan ID not received. Response:", scanResponse.data);
+            process.exit(1);
+        }
+
         const scanId = scanResponse.data.id;
         console.log(`Scan Triggered Successfully! Scan ID: ${scanId}`);
 
-        return scanId;
+        // Step 4: Monitor Scan Status
+        await monitorScan(scanId);
 
     } catch (error) {
         console.error('Error triggering scan:', error.response ? error.response.data : error.message);
         process.exit(1);
     }
-}
+};
 
-async function monitorScan(scanId) {
-    const statusUrl = `${API_URL_SCANS}/${scanId}`;
-    const startTime = Date.now();
+const monitorScan = async (scanId) => {
+    try {
+        console.log(`Monitoring scan status for Scan ID: ${scanId}`);
+        const scanStatusUrl = `${API_URL_SCANS}/${scanId}`;
 
-    while (true) {
-        try {
-            const response = await axios.get(statusUrl, {
-                headers: { 'x-api-key': API_KEY, 'Content-Type': 'application/json' }
+        while (true) {
+            const statusResponse = await axios.get(scanStatusUrl, {
+                headers: {
+                    'x-api-key': API_KEY,
+                    'Content-Type': 'application/json'
+                }
             });
 
-            const status = response.data.status;
-            console.log(`Scan Status: ${status}`);
+            const scanStatus = statusResponse.data.status;
 
-            if (status === "COMPLETED") {
-                console.log("Scan completed successfully.");
-                process.exit(0);
-            } else if (status === "FAILED" || status === "CANCELLED") {
-                console.error("Scan failed or was cancelled.");
+            console.log(`Current Scan Status: ${scanStatus}`);
+
+            if (scanStatus === "COMPLETE") {
+                console.log("Scan completed successfully!");
+                break;
+            } else if (scanStatus === "FAILED") {
+                console.error("Scan failed!");
                 process.exit(1);
             }
 
-            // Timeout condition
-            if (Date.now() - startTime > MAX_WAIT_TIME) {
-                console.error("Scan took too long and timed out.");
-                process.exit(1);
-            }
-
-            // Wait before checking again
-            await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL));
-
-        } catch (error) {
-            console.error('Error fetching scan status:', error.response ? error.response.data : error.message);
-            process.exit(1);
+            // Wait for 10 seconds before checking again
+            await new Promise(resolve => setTimeout(resolve, 10000));
         }
+    } catch (error) {
+        console.error('Error fetching scan status:', error.response ? error.response.data : error.message);
+        process.exit(1);
     }
-}
+};
 
-async function run() {
-    const scanId = await triggerScan();
-    await monitorScan(scanId);
-}
-
-run();
+triggerScan();
