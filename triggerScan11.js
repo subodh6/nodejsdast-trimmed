@@ -1,9 +1,12 @@
 const axios = require('axios');
 
-// ✅ Load environment variables (pass these in your pipeline)
-const API_KEY = process.env.API_KEY;
-const API_URL_SCANS = process.env.API_URL_SCANS; // Example: "https://api.scanner.com/scans"
-const SCAN_CONFIG_NAME = process.env.SCAN_CONFIG_NAME; // Example: "nodejsscan"
+// ✅ Load environment variables
+const API_KEY = process.env.RAPID7_API_KEY;
+const APP_NAME = process.env.APP_NAME;
+const SCAN_CONFIG_NAME = process.env.SCAN_CONFIG_NAME;
+
+// ✅ Rapid7 Base URL (Hardcoded for InsightAppSec API)
+const BASE_URL = "https://us.api.insight.rapid7.com/ias/v1";
 const MAX_WAIT_TIME = 30 * 60 * 1000; // 30 minutes timeout
 const POLL_INTERVAL = 60 * 1000; // 60 seconds
 
@@ -14,11 +17,11 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 const getScanConfigId = async () => {
     try {
         console.log("Fetching scan configurations...");
-        const response = await axios.get(`${API_URL_SCANS}/configs`, {
+        const response = await axios.get(`${BASE_URL}/scan-configurations`, {
             headers: { 'x-api-key': API_KEY, 'Content-Type': 'application/json' }
         });
 
-        const scanConfig = response.data.find(config => config.name === SCAN_CONFIG_NAME);
+        const scanConfig = response.data.resources.find(config => config.name === SCAN_CONFIG_NAME);
         if (!scanConfig) {
             console.error(`❌ Scan configuration "${SCAN_CONFIG_NAME}" not found.`);
             process.exit(1);
@@ -36,7 +39,7 @@ const getScanConfigId = async () => {
 const triggerScan = async (configId) => {
     try {
         console.log("Triggering the scan...");
-        const response = await axios.post(`${API_URL_SCANS}`, { configId }, {
+        const response = await axios.post(`${BASE_URL}/scans`, { scanConfigId: configId }, {
             headers: { 'x-api-key': API_KEY, 'Content-Type': 'application/json' }
         });
 
@@ -60,7 +63,7 @@ const monitorScan = async (scanId) => {
 
     while (Date.now() - startTime < MAX_WAIT_TIME) {
         try {
-            const response = await axios.get(`${API_URL_SCANS}/${scanId}`, {
+            const response = await axios.get(`${BASE_URL}/scans/${scanId}`, {
                 headers: { 'x-api-key': API_KEY, 'Content-Type': 'application/json' }
             });
 
