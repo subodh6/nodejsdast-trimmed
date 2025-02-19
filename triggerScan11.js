@@ -36,77 +36,44 @@ const triggerScan = async () => {
             headers: { 'x-api-key': API_KEY, 'Content-Type': 'application/json' }
         });
 
-        let scanId = scanResponse.data.id;
+        const scanId = scanResponse.data.id;
         if (!scanId) {
-            console.log("Scan triggered, waiting for scan ID...");
-        } else {
-            console.log(`Scan Triggered Successfully! Scan ID: ${scanId}`);
-            return scanId;
+            console.error("Failed to retrieve scan ID after triggering.");
+            process.exit(1);
         }
 
-        // Poll for the scan ID
+        console.log(`Scan Triggered Successfully! Scan ID: ${scanId}`);
+
+        // Poll for scan status
         let elapsedTime = 0;
         while (elapsedTime < MAX_WAIT_TIME) {
-            console.log(`Waiting for scan ID... (${elapsedTime / 1000}s elapsed)`);
+            console.log(`Checking scan status... (${elapsedTime / 1000}s elapsed)`);
             await sleep(POLL_INTERVAL);
             elapsedTime += POLL_INTERVAL;
 
-            // Check if scan has started
-            const scansResponse = await axios.get(API_URL_SCANS, {
+            const scanStatusResponse = await axios.get(`${API_URL_SCANS}/${scanId}`, {
                 headers: { 'x-api-key': API_KEY, 'Content-Type': 'application/json' }
             });
 
-            const runningScan = scansResponse.data.data.find(scan => scan.scan_config.id === scanConfig.id && scan.status !== 'Queued');
-            if (runningScan) {
-                console.log(`Scan started with ID: ${runningScan.id}`);
-                return runningScan.id;
+            const scanStatus = scanStatusResponse.data.status;
+            console.log(`Current scan status: ${scanStatus}`);
+
+            if (scanStatus === 'COMPLETE') {
+                console.log("Scan completed successfully.");
+                process.exit(0); // Success exit
+            } else if (scanStatus === 'FAILED' || scanStatus === 'CANCELED') {
+                console.error(`Scan failed with status: ${scanStatus}`);
+                process.exit(1); // Failure exit
             }
         }
 
-        console.error("Timed out waiting for scan ID.");
-        process.exit(1);
+        console.error("Scan monitoring timed out.");
+        process.exit(1); // Timeout exit
+
     } catch (error) {
         console.error('Error:', error.response ? error.response.data : error.message);
         process.exit(1);
     }
 };
 
-const monitorScan = async (scanId) => {
-    const startTime = Date.now();
-
-    while (Date.now() - startTime < MAX_WAIT_TIME) {
-        try {
-            const response = await axios.get(`${API_URL_SCANS}/${scanId}`, {
-                headers: { 'x-api-key': API_KEY, 'Content-Type': 'application/json' }
-            });
-
-            const scanStatus = response.data.status;
-            console.log(`Current scan status: ${scanStatus}`);
-
-            if (scanStatus === 'Complete') {
-                console.log('Scan completed successfully.');
-                return true;
-            } else if (scanStatus === 'Failed' || scanStatus === 'Blacked Out') {
-                console.error(`Scan ended with status: ${scanStatus}.`);
-                return false;
-            }
-        } catch (error) {
-            console.error('Error fetching scan status:', error.response ? error.response.data : error.message);
-        }
-
-        await sleep(POLL_INTERVAL);
-    }
-
-    console.error('Scan monitoring timed out.');
-    return false;
-};
-
-const run = async () => {
-    const scanId = await triggerScan();
-    if (!scanId) process.exit(1);
-
-    const success = await monitorScan(scanId);
-    process.exit(success ? 0 : 1);
-};
-
-run();
+triggerScan();
