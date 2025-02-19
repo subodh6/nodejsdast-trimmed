@@ -1,8 +1,8 @@
 const axios = require('axios');
 
-const API_KEY = "your-api-key";  // Replace with your API key
-const APP_NAME = "your-app-name";  // Replace with your App name
-const SCAN_CONFIG_NAME = "your-scan-config";  // Replace with your Scan Config
+const API_KEY = "1863ef6e-b5e6-450b-9f3b-bca1fbbb1cbc";  // Replace with your API key
+const APP_NAME = "devopssphere.site";  // Replace with your App name
+const SCAN_CONFIG_NAME = "nodejsscan";  // Replace with your Scan Config
 const MAX_WAIT_TIME = 60 * 60 * 1000;  // 1 hour timeout
 const POLL_INTERVAL = 60000;  // Check status every 60 seconds
 
