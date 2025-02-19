@@ -1,24 +1,51 @@
 const axios = require('axios');
 
-const API_KEY = "1863ef6e-b5e6-450b-9f3b-bca1fbbb1cbc";  // Replace with your API key
-const APP_NAME = "devopssphere.site";  // Replace with your App name
-const SCAN_CONFIG_NAME = "nodejsscan";  // Replace with your Scan Config
-const MAX_WAIT_TIME = 60 * 60 * 1000;  // 1 hour timeout
-const POLL_INTERVAL = 60000;  // Check status every 60 seconds
+// Environment Variables
+const API_KEY = process.env.RAPID7_API_KEY; // API Key from buildspec.yml
+const APP_NAME = process.env.APP_NAME || 'devopssphere.site'; // Application name
+const SCAN_CONFIG_NAME = process.env.SCAN_CONFIG_NAME || 'nodejsscan'; // Scan config name
+
+// API Endpoints
+const API_URL_SCAN_CONFIGS = 'https://us3.api.insight.rapid7.com/ias/v1/scan-configs';
+const API_URL_SCANS = 'https://us3.api.insight.rapid7.com/ias/v1/scans';
+
+// Polling Parameters
+const MAX_WAIT_TIME = 60 * 60 * 1000; // 1 Hour Timeout
+const POLL_INTERVAL = 60000; // 60 Seconds Polling
 
 async function triggerScan() {
-    const triggerUrl = `https://us.api.insight.rapid7.com/ias/v1/scans`;
-    
     try {
-        const response = await axios.post(triggerUrl, {
-            app: APP_NAME,
-            scanConfig: SCAN_CONFIG_NAME
-        }, {
-            headers: { 'X-Api-Key': API_KEY, 'Accept': 'application/json' }
+        // Fetch Scan Configs
+        const scanConfigsResponse = await axios.get(API_URL_SCAN_CONFIGS, {
+            headers: {
+                'x-api-key': API_KEY,
+                'Content-Type': 'application/json'
+            }
         });
 
-        const scanId = response.data.id;
-        console.log(`Scan triggered successfully. Scan ID: ${scanId}`);
+        const scanConfigs = scanConfigsResponse.data.data;
+        const scanConfig = scanConfigs.find(config => config.name === SCAN_CONFIG_NAME);
+
+        if (!scanConfig) {
+            console.error(`Scan Configuration "${SCAN_CONFIG_NAME}" not found.`);
+            process.exit(1);
+        }
+
+        console.log(`Found Scan Configuration: ${scanConfig.name}, ID: ${scanConfig.id}`);
+
+        // Trigger Scan
+        const scanResponse = await axios.post(API_URL_SCANS, {
+            scan_config: { id: scanConfig.id }
+        }, {
+            headers: {
+                'x-api-key': API_KEY,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        const scanId = scanResponse.data.id;
+        console.log(`Scan Triggered Successfully! Scan ID: ${scanId}`);
+
         return scanId;
 
     } catch (error) {
@@ -28,13 +55,13 @@ async function triggerScan() {
 }
 
 async function monitorScan(scanId) {
-    const statusUrl = `https://us.api.insight.rapid7.com/ias/v1/scans/${scanId}`;
+    const statusUrl = `${API_URL_SCANS}/${scanId}`;
     const startTime = Date.now();
 
     while (true) {
         try {
             const response = await axios.get(statusUrl, {
-                headers: { 'X-Api-Key': API_KEY, 'Accept': 'application/json' }
+                headers: { 'x-api-key': API_KEY, 'Content-Type': 'application/json' }
             });
 
             const status = response.data.status;
